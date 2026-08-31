@@ -6,7 +6,7 @@ from streamlit_calendar import calendar
 st.set_page_config(page_title="Agenda Compartilhada", layout="wide")
 
 # 1. Defina os nomes simples autorizados
-NOMES_AUTORIZADOS = ["gisele", "outro nome"]
+NOMES_AUTORIZADOS = ["Gisa", "Fabio", "Andre"]
 
 # 2. Inicialização correta de todas as variáveis da sessão
 if "autenticado" not in st.session_state:
