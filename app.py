@@ -10,9 +10,9 @@ st.set_page_config(page_title="Agenda Compartilhada", layout="wide")
 
 # 1. Dicionário vinculando os nomes aos e-mails que receberão os avisos
 USUARIOS = {
-    "Gisa": "gisanmendes@gmail.com",
-    "Fabio": "fabioadriano044@gmail.com",
-    "Andre": "gisanmendes@gmail.com"
+    "gisa": "gisanmendes@gmail.com",
+    "fabio": "fabioadriano044@gmail.com",
+    "andre": "gisanmendes@gmail.com"
 }
 
 # Função disparadora de e-mails
