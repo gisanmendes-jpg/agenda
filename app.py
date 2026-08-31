@@ -5,7 +5,7 @@ from sqlalchemy import text
 st.set_page_config(page_title="Agenda Compartilhada", layout="centered")
 
 # 1. Defina quem pode acessar a agenda
-EMAILS_AUTORIZADOS = ["seuemail@gmail.com", "outrapessoa@gmail.com"]
+EMAILS_AUTORIZADOS = ["gisanmendes@gmail.com", "outrapessoa@gmail.com"]
 
 # 2. Inicializa o controle de acesso na sessão
 if "autenticado" not in st.session_state:
