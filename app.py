@@ -68,7 +68,7 @@ else:
             st.success("Agendado!")
             st.rerun()
 
-    st.divider()
+    
 
     @st.fragment(run_every="10s")
     def painel_em_tempo_real():
