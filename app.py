@@ -20,18 +20,15 @@ if not st.session_state.autenticado:
     nome_digitado = st.text_input("Digite seu Nome")
     
     if st.button("Entrar"):
-        # Converte para letras minúsculas para ignorar diferenças (ex: 'Gisele' e 'gisele' vão funcionar)
         nomes_validos = [n.strip().lower() for n in NOMES_AUTORIZADOS]
         
         if nome_digitado.strip().lower() in nomes_validos:
             st.session_state.autenticado = True
-            # Salva o nome formatado na sessão para usar no preenchimento automático depois
             st.session_state.usuario_atual = nome_digitado.strip().title()
             st.rerun()
         else:
             st.error("Nome não reconhecido. Verifique a digitação.")
 else:
-    # Mostra quem está logado no topo da tela, ao lado do botão de sair
     col_vazia, col_info, col_sair = st.columns([3, 1, 1])
     with col_info:
         st.write(f"👤 Olá, {st.session_state.usuario_atual}")
@@ -53,17 +50,18 @@ else:
 
     with st.form("novo_evento"):
         col1, col2, col3, col4 = st.columns(4)
-        data = col1.date_input("Data")
+        # 3. Adicionado o parâmetro format para manter o calendário de input em BR
+        data = col1.date_input("Data", format="DD/MM/YYYY")
         hora = col2.time_input("Hora")
         titulo = col3.text_input("Título")
         
-        # O campo Responsável já vem preenchido com o nome de quem fez login
         responsavel = col4.text_input("Responsável", value=st.session_state.usuario_atual)
         
         if st.form_submit_button("Agendar Horário") and titulo:
             with conn.session as s:
                 s.execute(
                     text('INSERT INTO eventos (data, hora, titulo, responsavel) VALUES (:data, :hora, :titulo, :responsavel)'),
+                    # O banco de dados continua recebendo YYYY-MM-DD nos bastidores para ordenação correta
                     {"data": data.strftime("%Y-%m-%d"), "hora": hora.strftime("%H:%M"), "titulo": titulo, "responsavel": responsavel}
                 )
                 s.commit()
@@ -77,9 +75,23 @@ else:
         try:
             df = conn.query("SELECT * FROM eventos ORDER BY data, hora", ttl="0m")
             
+            # 4. Converte a coluna de data para objeto data, assim a tabela entende e formata
+            if not df.empty:
+                df['data'] = pd.to_datetime(df['data']).dt.date
+            
             with st.expander("Gerenciar / Excluir Eventos"):
                 if not df.empty:
-                    selecao = st.dataframe(df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
+                    # 5. Força a coluna 'data' a ser exibida como DD/MM/YYYY na visualização
+                    selecao = st.dataframe(
+                        df, 
+                        use_container_width=True, 
+                        hide_index=True, 
+                        on_select="rerun", 
+                        selection_mode="single-row",
+                        column_config={
+                            "data": st.column_config.DateColumn("Data", format="DD/MM/YYYY")
+                        }
+                    )
                     linhas = selecao.selection.rows
                     if len(linhas) > 0:
                         evento = df.iloc[linhas[0]]
@@ -87,7 +99,8 @@ else:
                             with conn.session as s:
                                 s.execute(
                                     text("DELETE FROM eventos WHERE data=:data AND hora=:hora AND titulo=:titulo"),
-                                    {"data": evento['data'], "hora": evento['hora'], "titulo": evento['titulo']}
+                                    # Converte de volta para YYYY-MM-DD para deletar do banco
+                                    {"data": evento['data'].strftime("%Y-%m-%d"), "hora": evento['hora'], "titulo": evento['titulo']}
                                 )
                                 s.commit()
                             st.rerun()
@@ -99,15 +112,22 @@ else:
             eventos_visuais = []
             if not df.empty:
                 for _, row in df.iterrows():
-                    inicio = f"{row['data']}T{row['hora']}:00"
+                    # Formata a data de volta para o padrão ISO que o visualizador do calendário exige
+                    inicio = f"{row['data'].strftime('%Y-%m-%d')}T{row['hora']}:00"
                     eventos_visuais.append({
-                        # O calendário agora mostra o título do evento e quem marcou
                         "title": f"{row['titulo']} ({row['responsavel']})",
                         "start": inicio,
                         "color": "#17803d"
                     })
             
+            # 6. Adicionados 'locale' e 'buttonText' para traduzir 100% o calendário
             opcoes_calendario = {
+                "locale": "pt-br",
+                "buttonText": {
+                    "today": "Hoje",
+                    "week": "Semana",
+                    "day": "Dia"
+                },
                 "headerToolbar": {
                     "left": "today prev,next",
                     "center": "title",
