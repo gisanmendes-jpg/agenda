@@ -20,6 +20,8 @@ if not st.session_state.autenticado:
             st.rerun()
         else:
             st.error("E-mail não autorizado.")
+# ... (O cabeçalho e a tela de Login permanecem exatamente iguais) ...
+
 else:
     col_vazia, col_sair = st.columns([4, 1])
     with col_sair:
@@ -38,7 +40,7 @@ else:
 
     st.title("📅 Agenda Compartilhada")
 
-    # 1. Formulário de Agendamento
+    # 1. Formulário (Fica de fora da atualização automática para não apagar durante a digitação)
     with st.form("novo_evento"):
         col1, col2, col3, col4 = st.columns(4)
         data = col1.date_input("Data")
@@ -56,56 +58,60 @@ else:
             st.success("Agendado!")
             st.rerun()
 
-    
+    st.divider()
 
-    # 2. Leitura dos Dados
-    try:
-        df = conn.query("SELECT * FROM eventos ORDER BY data, hora", ttl="0m")
-        
-        # 3. Gerenciamento de Eventos (Menu Suspenso ANTES do calendário)
-        with st.expander("Gerenciar / Excluir Eventos"):
+    # 2. Fragmento de Tempo Real (Roda de forma independente a cada 10 segundos)
+    @st.fragment(run_every="10s")
+    def painel_em_tempo_real():
+        try:
+            # Busca os dados mais recentes no Supabase
+            df = conn.query("SELECT * FROM eventos ORDER BY data, hora", ttl="0m")
+            
+            with st.expander("Gerenciar / Excluir Eventos"):
+                if not df.empty:
+                    selecao = st.dataframe(df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
+                    linhas = selecao.selection.rows
+                    if len(linhas) > 0:
+                        evento = df.iloc[linhas[0]]
+                        if st.button(f"🗑️ Excluir '{evento['titulo']}'", type="primary"):
+                            with conn.session as s:
+                                s.execute(
+                                    text("DELETE FROM eventos WHERE data=:data AND hora=:hora AND titulo=:titulo"),
+                                    {"data": evento['data'], "hora": evento['hora'], "titulo": evento['titulo']}
+                                )
+                                s.commit()
+                            st.rerun() # Atualiza apenas este fragmento
+                else:
+                    st.info("Nenhum evento agendado.")
+
+            st.subheader("Visão Geral de Disponibilidade")
+            
+            eventos_visuais = []
             if not df.empty:
-                selecao = st.dataframe(df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
-                linhas = selecao.selection.rows
-                if len(linhas) > 0:
-                    evento = df.iloc[linhas[0]]
-                    if st.button(f"🗑️ Excluir '{evento['titulo']}'", type="primary"):
-                        with conn.session as s:
-                            s.execute(
-                                text("DELETE FROM eventos WHERE data=:data AND hora=:hora AND titulo=:titulo"),
-                                {"data": evento['data'], "hora": evento['hora'], "titulo": evento['titulo']}
-                            )
-                            s.commit()
-                        st.rerun()
-            else:
-                st.info("Nenhum evento agendado.")
-
-        # 4. Formatação e Renderização do Calendário Visual
-        st.subheader("Visão Geral de Disponibilidade")
-        
-        eventos_visuais = []
-        if not df.empty:
-            for _, row in df.iterrows():
-                inicio = f"{row['data']}T{row['hora']}:00"
-                eventos_visuais.append({
-                    "title": f"Ocupado: {row['titulo']}",
-                    "start": inicio,
-                    "color": "#17803d"
-                })
-        
-        opcoes_calendario = {
-            "headerToolbar": {
-                "left": "today prev,next",
-                "center": "title",
-                "right": "timeGridWeek,timeGridDay"
-            },
-            "initialView": "timeGridWeek",
-            "slotMinTime": "06:00:00",
-            "slotMaxTime": "22:00:00",
-            "allDaySlot": False,
-        }
-        
-        calendar(events=eventos_visuais, options=opcoes_calendario)
+                for _, row in df.iterrows():
+                    inicio = f"{row['data']}T{row['hora']}:00"
+                    eventos_visuais.append({
+                        "title": f"Ocupado: {row['titulo']}",
+                        "start": inicio,
+                        "color": "#17803d"
+                    })
+            
+            opcoes_calendario = {
+                "headerToolbar": {
+                    "left": "today prev,next",
+                    "center": "title",
+                    "right": "timeGridWeek,timeGridDay"
+                },
+                "initialView": "timeGridWeek",
+                "slotMinTime": "06:00:00",
+                "slotMaxTime": "22:00:00",
+                "allDaySlot": False,
+            }
+            
+            calendar(events=eventos_visuais, options=opcoes_calendario)
                 
-    except Exception as e:
-        st.error(f"Erro: {e}")
+        except Exception as e:
+            st.error(f"Erro: {e}")
+
+    # 3. Executa a função do fragmento na tela
+    painel_em_tempo_real()
