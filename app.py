@@ -2,13 +2,40 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import text
 from streamlit_calendar import calendar
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 st.set_page_config(page_title="Agenda Compartilhada", layout="wide")
 
-# 1. Defina os nomes simples autorizados
-NOMES_AUTORIZADOS = ["Gisa", "Fabio", "Andre", "Guilherme"]
+# 1. Dicionário vinculando os nomes aos e-mails que receberão os avisos
+USUARIOS = {
+    "Gisa": "gisanmendes@gmail.com",
+    "Fabio": "fabioadriano044@gmail.com",
+    "Andre": "gisanmendes@gmail.com"
+}
 
-# 2. Inicialização correta de todas as variáveis da sessão
+# Função disparadora de e-mails
+def enviar_aviso(destinatario, assunto, corpo):
+    try:
+        remetente = st.secrets["email"]["endereco"]
+        senha = st.secrets["email"]["senha"]
+        
+        msg = MIMEMultipart()
+        msg['From'] = remetente
+        msg['To'] = destinatario
+        msg['Subject'] = assunto
+        msg.attach(MIMEText(corpo, 'plain', 'utf-8'))
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(remetente, senha)
+        server.send_message(msg)
+        server.quit()
+    except Exception as e:
+        st.toast(f"Aviso: O evento foi salvo, mas houve falha ao enviar o e-mail ({e})")
+
+# Inicialização da sessão
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
@@ -20,9 +47,7 @@ if not st.session_state.autenticado:
     nome_digitado = st.text_input("Digite seu Nome")
     
     if st.button("Entrar"):
-        nomes_validos = [n.strip().lower() for n in NOMES_AUTORIZADOS]
-        
-        if nome_digitado.strip().lower() in nomes_validos:
+        if nome_digitado.strip().lower() in USUARIOS:
             st.session_state.autenticado = True
             st.session_state.usuario_atual = nome_digitado.strip().title()
             st.rerun()
@@ -50,38 +75,41 @@ else:
 
     with st.form("novo_evento"):
         col1, col2, col3, col4 = st.columns(4)
-        # 3. Adicionado o parâmetro format para manter o calendário de input em BR
         data = col1.date_input("Data", format="DD/MM/YYYY")
         hora = col2.time_input("Hora")
         titulo = col3.text_input("Título")
-        
         responsavel = col4.text_input("Responsável", value=st.session_state.usuario_atual)
         
         if st.form_submit_button("Agendar Horário") and titulo:
             with conn.session as s:
                 s.execute(
                     text('INSERT INTO eventos (data, hora, titulo, responsavel) VALUES (:data, :hora, :titulo, :responsavel)'),
-                    # O banco de dados continua recebendo YYYY-MM-DD nos bastidores para ordenação correta
                     {"data": data.strftime("%Y-%m-%d"), "hora": hora.strftime("%H:%M"), "titulo": titulo, "responsavel": responsavel}
                 )
                 s.commit()
-            st.success("Agendado!")
+            
+            # Dispara o e-mail se o responsável estiver na lista de usuários
+            resp_chave = responsavel.strip().lower()
+            if resp_chave in USUARIOS:
+                assunto = f"📅 Novo Agendamento: {titulo}"
+                corpo = f"Olá {responsavel},\n\nUm novo compromisso foi adicionado à sua agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {titulo}\n📅 Data: {data.strftime('%d/%m/%Y')}\n⏰ Hora: {hora.strftime('%H:%M')}\n\nAcesse o aplicativo para ver a disponibilidade geral."
+                enviar_aviso(USUARIOS[resp_chave], assunto, corpo)
+                
+            st.success("Agendado e notificado!")
             st.rerun()
 
-    
+    st.divider()
 
     @st.fragment(run_every="10s")
     def painel_em_tempo_real():
         try:
             df = conn.query("SELECT * FROM eventos ORDER BY data, hora", ttl="0m")
             
-            # 4. Converte a coluna de data para objeto data, assim a tabela entende e formata
             if not df.empty:
                 df['data'] = pd.to_datetime(df['data']).dt.date
             
             with st.expander("Gerenciar / Excluir Eventos"):
                 if not df.empty:
-                    # 5. Força a coluna 'data' a ser exibida como DD/MM/YYYY na visualização
                     selecao = st.dataframe(
                         df, 
                         use_container_width=True, 
@@ -99,10 +127,17 @@ else:
                             with conn.session as s:
                                 s.execute(
                                     text("DELETE FROM eventos WHERE data=:data AND hora=:hora AND titulo=:titulo"),
-                                    # Converte de volta para YYYY-MM-DD para deletar do banco
                                     {"data": evento['data'].strftime("%Y-%m-%d"), "hora": evento['hora'], "titulo": evento['titulo']}
                                 )
                                 s.commit()
+                            
+                            # Dispara e-mail de exclusão
+                            resp_chave = evento['responsavel'].strip().lower()
+                            if resp_chave in USUARIOS:
+                                assunto = f"❌ Cancelamento: {evento['titulo']}"
+                                corpo = f"Olá {evento['responsavel']},\n\nO compromisso abaixo foi cancelado da sua agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {evento['titulo']}\n📅 Data: {evento['data'].strftime('%d/%m/%Y')}\n⏰ Hora: {evento['hora']}"
+                                enviar_aviso(USUARIOS[resp_chave], assunto, corpo)
+                                
                             st.rerun()
                 else:
                     st.info("Nenhum evento agendado.")
@@ -112,7 +147,6 @@ else:
             eventos_visuais = []
             if not df.empty:
                 for _, row in df.iterrows():
-                    # Formata a data de volta para o padrão ISO que o visualizador do calendário exige
                     inicio = f"{row['data'].strftime('%Y-%m-%d')}T{row['hora']}:00"
                     eventos_visuais.append({
                         "title": f"{row['titulo']} ({row['responsavel']})",
@@ -120,7 +154,6 @@ else:
                         "color": "#17803d"
                     })
             
-            # 6. Adicionados 'locale' e 'buttonText' para traduzir 100% o calendário
             opcoes_calendario = {
                 "locale": "pt-br",
                 "buttonText": {
