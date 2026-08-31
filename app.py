@@ -102,7 +102,7 @@ else:
                 time.sleep(1.5)
                 st.rerun()
 
-    st.divider()
+   
 
     @st.fragment(run_every="10s")
     def painel_em_tempo_real():
