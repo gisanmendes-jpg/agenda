@@ -3,9 +3,9 @@ import pandas as pd
 from sqlalchemy import text
 from streamlit_calendar import calendar
 
-st.set_page_config(page_title="Agenda Compartilhada", layout="wide") # 'wide' fica melhor para o calendário
+st.set_page_config(page_title="Agenda Compartilhada", layout="wide")
 
-EMAILS_AUTORIZADOS = ["gisanmendes@gmail.com", "fabioadriano044@gmail.com"]
+EMAILS_AUTORIZADOS = ["gisanmendes@gmail.com", "fabioadriano044@@gmail.com"]
 
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
@@ -62,36 +62,7 @@ else:
     try:
         df = conn.query("SELECT * FROM eventos ORDER BY data, hora", ttl="0m")
         
-        # 3. Formatação para o Calendário Visual
-        eventos_visuais = []
-        if not df.empty:
-            for _, row in df.iterrows():
-                # Junta data e hora no formato ISO (ex: 2026-09-07T10:00:00)
-                inicio = f"{row['data']}T{row['hora']}:00"
-                eventos_visuais.append({
-                    "title": f"Ocupado: {row['titulo']}",
-                    "start": inicio,
-                    "color": "#17803d" # Cor verde semelhante a da sua imagem
-                })
-        
-        # 4. Renderização do Calendário (Estilo Google)
-        opcoes_calendario = {
-            "headerToolbar": {
-                "left": "today prev,next",
-                "center": "title",
-                "right": "timeGridWeek,timeGridDay"
-            },
-            "initialView": "timeGridWeek", # Abre na visão semanal
-            "slotMinTime": "06:00:00",     # Esconde a madrugada
-            "slotMaxTime": "22:00:00",
-            "allDaySlot": False,
-        }
-        
-        # Exibe a interface
-        st.subheader("Visão Geral de Disponibilidade")
-        calendar(events=eventos_visuais, options=opcoes_calendario)
-
-        # 5. Mantém a tabela apenas para exclusão
+        # 3. Gerenciamento de Eventos (Menu Suspenso ANTES do calendário)
         with st.expander("Gerenciar / Excluir Eventos"):
             if not df.empty:
                 selecao = st.dataframe(df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
@@ -101,13 +72,40 @@ else:
                     if st.button(f"🗑️ Excluir '{evento['titulo']}'", type="primary"):
                         with conn.session as s:
                             s.execute(
-                                text("DELETE FROM eventos WHERE data=:data AND hora=:hora"),
-                                {"data": evento['data'], "hora": evento['hora']}
+                                text("DELETE FROM eventos WHERE data=:data AND hora=:hora AND titulo=:titulo"),
+                                {"data": evento['data'], "hora": evento['hora'], "titulo": evento['titulo']}
                             )
                             s.commit()
                         st.rerun()
             else:
-                st.info("Nenhum evento.")
+                st.info("Nenhum evento agendado.")
+
+        # 4. Formatação e Renderização do Calendário Visual
+        st.subheader("Visão Geral de Disponibilidade")
+        
+        eventos_visuais = []
+        if not df.empty:
+            for _, row in df.iterrows():
+                inicio = f"{row['data']}T{row['hora']}:00"
+                eventos_visuais.append({
+                    "title": f"Ocupado: {row['titulo']}",
+                    "start": inicio,
+                    "color": "#17803d"
+                })
+        
+        opcoes_calendario = {
+            "headerToolbar": {
+                "left": "today prev,next",
+                "center": "title",
+                "right": "timeGridWeek,timeGridDay"
+            },
+            "initialView": "timeGridWeek",
+            "slotMinTime": "06:00:00",
+            "slotMaxTime": "22:00:00",
+            "allDaySlot": False,
+        }
+        
+        calendar(events=eventos_visuais, options=opcoes_calendario)
                 
     except Exception as e:
         st.error(f"Erro: {e}")
