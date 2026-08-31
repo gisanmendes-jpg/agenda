@@ -13,7 +13,7 @@ st.set_page_config(page_title="Agenda Compartilhada", layout="wide")
 USUARIOS = {
     "gisa": "gisanmendes@gmail.com",
     "fabio": "fabioadriano044@gmail.com",
-    "andre": "fgacursonline@gmail.com"
+    "andre": "gisanmendes@gmail.com"
 }
 
 # Função disparadora de e-mails
@@ -81,6 +81,9 @@ else:
         titulo = col3.text_input("Título")
         responsavel = col4.text_input("Responsável", value=st.session_state.usuario_atual)
         
+        # NOVO: Checkbox para escolher se envia ou não o e-mail na criação
+        enviar_email_criacao = st.checkbox("Enviar notificação por e-mail para todos os usuários", value=True)
+        
         if st.form_submit_button("Agendar Horário"):
             if not titulo.strip():
                 st.warning("⚠️ O campo 'Título' é obrigatório para salvar o evento.")
@@ -92,13 +95,16 @@ else:
                     )
                     s.commit()
                 
-                # NOVO: Dispara e-mail para TODOS da lista
-                assunto = f"📅 Novo Agendamento: {titulo}"
-                for nome, email_destinatario in USUARIOS.items():
-                    corpo = f"Olá {nome.title()},\n\nUm novo compromisso foi adicionado à agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {titulo}\n👤 Responsável: {responsavel}\n📅 Data: {data.strftime('%d/%m/%Y')}\n⏰ Hora: {hora.strftime('%H:%M')}\n\nAcesse o aplicativo para ver a disponibilidade geral."
-                    enviar_aviso(email_destinatario, assunto, corpo)
-                    
-                st.success("✅ Agendado! Todos os usuários foram notificados.")
+                # Valida o checkbox antes de disparar os e-mails
+                if enviar_email_criacao:
+                    assunto = f"📅 Novo Agendamento: {titulo}"
+                    for nome, email_destinatario in USUARIOS.items():
+                        corpo = f"Olá {nome.title()},\n\nUm novo compromisso foi adicionado à agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {titulo}\n👤 Responsável: {responsavel}\n📅 Data: {data.strftime('%d/%m/%Y')}\n⏰ Hora: {hora.strftime('%H:%M')}\n\nAcesse o aplicativo para ver a disponibilidade geral."
+                        enviar_aviso(email_destinatario, assunto, corpo)
+                    st.success("✅ Agendado! Todos os usuários foram notificados.")
+                else:
+                    st.success("✅ Agendado com sucesso! (Nenhum e-mail foi enviado).")
+                
                 time.sleep(1.5)
                 st.rerun()
 
@@ -127,6 +133,10 @@ else:
                     linhas = selecao.selection.rows
                     if len(linhas) > 0:
                         evento = df.iloc[linhas[0]]
+                        
+                        # NOVO: Checkbox para escolher se envia ou não o e-mail na exclusão
+                        enviar_email_exclusao = st.checkbox("Avisar todos por e-mail sobre este cancelamento", value=True, key="chk_exclusao")
+                        
                         if st.button(f"🗑️ Excluir '{evento['titulo']}'", type="primary"):
                             with conn.session as s:
                                 s.execute(
@@ -135,13 +145,16 @@ else:
                                 )
                                 s.commit()
                             
-                            # NOVO: Dispara e-mail de exclusão para TODOS da lista
-                            assunto = f"❌ Cancelamento: {evento['titulo']}"
-                            for nome, email_destinatario in USUARIOS.items():
-                                corpo = f"Olá {nome.title()},\n\nO compromisso abaixo foi cancelado da agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {evento['titulo']}\n👤 Responsável: {evento['responsavel']}\n📅 Data: {evento['data'].strftime('%d/%m/%Y')}\n⏰ Hora: {evento['hora']}"
-                                enviar_aviso(email_destinatario, assunto, corpo)
-                            
-                            st.success("✅ Evento cancelado. Todos os usuários foram notificados!")
+                            # Valida o checkbox antes de disparar os e-mails
+                            if enviar_email_exclusao:
+                                assunto = f"❌ Cancelamento: {evento['titulo']}"
+                                for nome, email_destinatario in USUARIOS.items():
+                                    corpo = f"Olá {nome.title()},\n\nO compromisso abaixo foi cancelado da agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {evento['titulo']}\n👤 Responsável: {evento['responsavel']}\n📅 Data: {evento['data'].strftime('%d/%m/%Y')}\n⏰ Hora: {evento['hora']}"
+                                    enviar_aviso(email_destinatario, assunto, corpo)
+                                st.success("✅ Evento cancelado. Todos os usuários foram notificados!")
+                            else:
+                                st.success("✅ Evento cancelado! (Nenhum e-mail foi enviado).")
+                                
                             time.sleep(1.5)
                             st.rerun()
                 else:
