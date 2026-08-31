@@ -5,7 +5,7 @@ from streamlit_calendar import calendar
 
 st.set_page_config(page_title="Agenda Compartilhada", layout="wide") # 'wide' fica melhor para o calendário
 
-EMAILS_AUTORIZADOS = ["gisanmendes@gmail.com", "fabioadriano044@@gmail.com"]
+EMAILS_AUTORIZADOS = ["gisanmendes@gmail.com", "fabioadriano044@gmail.com"]
 
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
