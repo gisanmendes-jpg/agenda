@@ -21,13 +21,13 @@ if not st.session_state.autenticado:
     if st.button("Entrar"):
         if email_digitado.strip().lower() in EMAILS_AUTORIZADOS:
             st.session_state.autenticado = True
-            st.rerun() # Recarrega a página para mostrar a agenda
+            st.rerun()
         else:
             st.error("E-mail não autorizado. Verifique a digitação.")
 
-# 4. O Aplicativo Principal (Só aparece se autenticado)
+# 4. O Aplicativo Principal
 else:
-    # Botão para deslogar no topo da página
+    # Botão Sair
     col_vazia, col_sair = st.columns([4, 1])
     with col_sair:
         if st.button("Sair"):
@@ -47,6 +47,7 @@ else:
 
     st.title("📅 Agenda Compartilhada")
 
+    # Formulário de Agendamento
     with st.form("novo_evento"):
         st.subheader("Agendar Novo Evento")
         col1, col2 = st.columns(2)
@@ -69,13 +70,49 @@ else:
             st.rerun()
 
     st.divider()
+    
+    # Seção da Tabela com Exclusão
     st.subheader("Próximos Eventos")
+    st.caption("Selecione a caixa ao lado de um evento na tabela para opções de exclusão.")
 
     try:
         df = conn.query("SELECT * FROM eventos ORDER BY data, hora", ttl="0m")
         if not df.empty:
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            
+            # Tabela interativa (permite selecionar 1 linha por vez)
+            selecao_evento = st.dataframe(
+                df, 
+                use_container_width=True, 
+                hide_index=True,
+                on_select="rerun",           # Atualiza a tela ao clicar
+                selection_mode="single-row"  # Habilita seleção de linha
+            )
+            
+            # Verifica se alguma linha foi clicada
+            linhas_selecionadas = selecao_evento.selection.rows
+            
+            if len(linhas_selecionadas) > 0:
+                # Pega os dados da linha que o usuário clicou
+                indice = linhas_selecionadas[0]
+                evento = df.iloc[indice]
+                
+                # Exibe a área de confirmação de exclusão
+                st.error(f"⚠️ Deseja realmente cancelar o evento **{evento['titulo']}** do dia {evento['data']}?")
+                
+                if st.button("Confirmar Exclusão", type="primary"):
+                    with conn.session as s:
+                        # Deleta o evento buscando a combinação exata de data, hora e título
+                        s.execute(
+                            text("DELETE FROM eventos WHERE data=:data AND hora=:hora AND titulo=:titulo AND responsavel=:responsavel"),
+                            {"data": evento['data'], "hora": evento['hora'], "titulo": evento['titulo'], "responsavel": evento['responsavel']}
+                        )
+                        s.commit()
+                    
+                    st.success("Evento excluído com sucesso!")
+                    st.rerun()
+                    
         else:
             st.info("Nenhum evento agendado ainda. Use o formulário acima para começar.")
+            
     except Exception as e:
         st.error(f"Erro ao carregar os eventos: {e}")
