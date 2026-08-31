@@ -5,7 +5,7 @@ from streamlit_calendar import calendar
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import time  # Adicionado para pausar a tela e exibir as mensagens de sucesso
+import time
 
 st.set_page_config(page_title="Agenda Compartilhada", layout="wide")
 
@@ -34,7 +34,7 @@ def enviar_aviso(destinatario, assunto, corpo):
         server.send_message(msg)
         server.quit()
     except Exception as e:
-        st.toast(f"Aviso: O evento foi salvo, mas houve falha ao enviar o e-mail ({e})")
+        st.toast(f"Aviso: Houve falha ao enviar o e-mail para {destinatario} ({e})")
 
 # Inicialização da sessão
 if "autenticado" not in st.session_state:
@@ -74,7 +74,6 @@ else:
 
     st.title("📅 Agenda Compartilhada")
 
-    # Adicionado clear_on_submit para limpar os campos após salvar
     with st.form("novo_evento", clear_on_submit=True):
         col1, col2, col3, col4 = st.columns(4)
         data = col1.date_input("Data", format="DD/MM/YYYY")
@@ -82,7 +81,6 @@ else:
         titulo = col3.text_input("Título")
         responsavel = col4.text_input("Responsável", value=st.session_state.usuario_atual)
         
-        # A validação agora acontece dentro do if do botão para gerar um aviso visual
         if st.form_submit_button("Agendar Horário"):
             if not titulo.strip():
                 st.warning("⚠️ O campo 'Título' é obrigatório para salvar o evento.")
@@ -94,15 +92,14 @@ else:
                     )
                     s.commit()
                 
-                # Dispara o e-mail se o responsável estiver na lista de usuários
-                resp_chave = responsavel.strip().lower()
-                if resp_chave in USUARIOS:
-                    assunto = f"📅 Novo Agendamento: {titulo}"
-                    corpo = f"Olá {responsavel},\n\nUm novo compromisso foi adicionado à sua agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {titulo}\n📅 Data: {data.strftime('%d/%m/%Y')}\n⏰ Hora: {hora.strftime('%H:%M')}\n\nAcesse o aplicativo para ver a disponibilidade geral."
-                    enviar_aviso(USUARIOS[resp_chave], assunto, corpo)
+                # NOVO: Dispara e-mail para TODOS da lista
+                assunto = f"📅 Novo Agendamento: {titulo}"
+                for nome, email_destinatario in USUARIOS.items():
+                    corpo = f"Olá {nome.title()},\n\nUm novo compromisso foi adicionado à agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {titulo}\n👤 Responsável: {responsavel}\n📅 Data: {data.strftime('%d/%m/%Y')}\n⏰ Hora: {hora.strftime('%H:%M')}\n\nAcesse o aplicativo para ver a disponibilidade geral."
+                    enviar_aviso(email_destinatario, assunto, corpo)
                     
-                st.success("✅ Agendado e notificado com sucesso!")
-                time.sleep(1.5) # Pausa rápida para a pessoa ler a confirmação verde
+                st.success("✅ Agendado! Todos os usuários foram notificados.")
+                time.sleep(1.5)
                 st.rerun()
 
     st.divider()
@@ -138,15 +135,14 @@ else:
                                 )
                                 s.commit()
                             
-                            # Dispara e-mail de exclusão
-                            resp_chave = evento['responsavel'].strip().lower()
-                            if resp_chave in USUARIOS:
-                                assunto = f"❌ Cancelamento: {evento['titulo']}"
-                                corpo = f"Olá {evento['responsavel']},\n\nO compromisso abaixo foi cancelado da sua agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {evento['titulo']}\n📅 Data: {evento['data'].strftime('%d/%m/%Y')}\n⏰ Hora: {evento['hora']}"
-                                enviar_aviso(USUARIOS[resp_chave], assunto, corpo)
+                            # NOVO: Dispara e-mail de exclusão para TODOS da lista
+                            assunto = f"❌ Cancelamento: {evento['titulo']}"
+                            for nome, email_destinatario in USUARIOS.items():
+                                corpo = f"Olá {nome.title()},\n\nO compromisso abaixo foi cancelado da agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {evento['titulo']}\n👤 Responsável: {evento['responsavel']}\n📅 Data: {evento['data'].strftime('%d/%m/%Y')}\n⏰ Hora: {evento['hora']}"
+                                enviar_aviso(email_destinatario, assunto, corpo)
                             
-                            st.success("✅ Evento cancelado e notificado!")
-                            time.sleep(1.5) # Mesma pausa para leitura
+                            st.success("✅ Evento cancelado. Todos os usuários foram notificados!")
+                            time.sleep(1.5)
                             st.rerun()
                 else:
                     st.info("Nenhum evento agendado.")
