@@ -56,7 +56,7 @@ else:
             st.success("Agendado!")
             st.rerun()
 
-    st.divider()
+    
 
     # 2. Leitura dos Dados
     try:
