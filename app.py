@@ -58,7 +58,7 @@ else:
             st.success("Agendado!")
             st.rerun()
 
-    st.divider()
+  
 
     # 2. Fragmento de Tempo Real (Roda de forma independente a cada 10 segundos)
     @st.fragment(run_every="10s")
