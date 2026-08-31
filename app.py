@@ -5,6 +5,7 @@ from streamlit_calendar import calendar
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import time  # Adicionado para pausar a tela e exibir as mensagens de sucesso
 
 st.set_page_config(page_title="Agenda Compartilhada", layout="wide")
 
@@ -73,30 +74,36 @@ else:
 
     st.title("📅 Agenda Compartilhada")
 
-    with st.form("novo_evento"):
+    # Adicionado clear_on_submit para limpar os campos após salvar
+    with st.form("novo_evento", clear_on_submit=True):
         col1, col2, col3, col4 = st.columns(4)
         data = col1.date_input("Data", format="DD/MM/YYYY")
         hora = col2.time_input("Hora")
         titulo = col3.text_input("Título")
         responsavel = col4.text_input("Responsável", value=st.session_state.usuario_atual)
         
-        if st.form_submit_button("Agendar Horário") and titulo:
-            with conn.session as s:
-                s.execute(
-                    text('INSERT INTO eventos (data, hora, titulo, responsavel) VALUES (:data, :hora, :titulo, :responsavel)'),
-                    {"data": data.strftime("%Y-%m-%d"), "hora": hora.strftime("%H:%M"), "titulo": titulo, "responsavel": responsavel}
-                )
-                s.commit()
-            
-            # Dispara o e-mail se o responsável estiver na lista de usuários
-            resp_chave = responsavel.strip().lower()
-            if resp_chave in USUARIOS:
-                assunto = f"📅 Novo Agendamento: {titulo}"
-                corpo = f"Olá {responsavel},\n\nUm novo compromisso foi adicionado à sua agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {titulo}\n📅 Data: {data.strftime('%d/%m/%Y')}\n⏰ Hora: {hora.strftime('%H:%M')}\n\nAcesse o aplicativo para ver a disponibilidade geral."
-                enviar_aviso(USUARIOS[resp_chave], assunto, corpo)
+        # A validação agora acontece dentro do if do botão para gerar um aviso visual
+        if st.form_submit_button("Agendar Horário"):
+            if not titulo.strip():
+                st.warning("⚠️ O campo 'Título' é obrigatório para salvar o evento.")
+            else:
+                with conn.session as s:
+                    s.execute(
+                        text('INSERT INTO eventos (data, hora, titulo, responsavel) VALUES (:data, :hora, :titulo, :responsavel)'),
+                        {"data": data.strftime("%Y-%m-%d"), "hora": hora.strftime("%H:%M"), "titulo": titulo, "responsavel": responsavel}
+                    )
+                    s.commit()
                 
-            st.success("Agendado e notificado!")
-            st.rerun()
+                # Dispara o e-mail se o responsável estiver na lista de usuários
+                resp_chave = responsavel.strip().lower()
+                if resp_chave in USUARIOS:
+                    assunto = f"📅 Novo Agendamento: {titulo}"
+                    corpo = f"Olá {responsavel},\n\nUm novo compromisso foi adicionado à sua agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {titulo}\n📅 Data: {data.strftime('%d/%m/%Y')}\n⏰ Hora: {hora.strftime('%H:%M')}\n\nAcesse o aplicativo para ver a disponibilidade geral."
+                    enviar_aviso(USUARIOS[resp_chave], assunto, corpo)
+                    
+                st.success("✅ Agendado e notificado com sucesso!")
+                time.sleep(1.5) # Pausa rápida para a pessoa ler a confirmação verde
+                st.rerun()
 
     st.divider()
 
@@ -137,7 +144,9 @@ else:
                                 assunto = f"❌ Cancelamento: {evento['titulo']}"
                                 corpo = f"Olá {evento['responsavel']},\n\nO compromisso abaixo foi cancelado da sua agenda por {st.session_state.usuario_atual}.\n\n📌 Título: {evento['titulo']}\n📅 Data: {evento['data'].strftime('%d/%m/%Y')}\n⏰ Hora: {evento['hora']}"
                                 enviar_aviso(USUARIOS[resp_chave], assunto, corpo)
-                                
+                            
+                            st.success("✅ Evento cancelado e notificado!")
+                            time.sleep(1.5) # Mesma pausa para leitura
                             st.rerun()
                 else:
                     st.info("Nenhum evento agendado.")
