@@ -5,25 +5,32 @@ from streamlit_calendar import calendar
 
 st.set_page_config(page_title="Agenda Compartilhada", layout="wide")
 
-EMAILS_AUTORIZADOS = ["gisanmendes@gmail.com", "fabioadriano044@gmail.com"]
+# 1. Defina os nomes simples autorizados
+NOMES_AUTORIZADOS = ["Gisa", "Fabio", "Andre"]
 
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
     st.title("🔒 Acesso Restrito")
-    email_digitado = st.text_input("Seu e-mail")
+    nome_digitado = st.text_input("Digite seu Nome")
     
     if st.button("Entrar"):
-        if email_digitado.strip().lower() in EMAILS_AUTORIZADOS:
+        # Converte para letras minúsculas para ignorar diferenças (ex: 'Gisele' e 'gisele' vão funcionar)
+        nomes_validos = [n.strip().lower() for n in NOMES_AUTORIZADOS]
+        
+        if nome_digitado.strip().lower() in nomes_validos:
             st.session_state.autenticado = True
+            # Salva o nome formatado na sessão para usar no preenchimento automático depois
+            st.session_state.usuario_atual = nome_digitado.strip().title()
             st.rerun()
         else:
-            st.error("E-mail não autorizado.")
-# ... (O cabeçalho e a tela de Login permanecem exatamente iguais) ...
-
+            st.error("Nome não reconhecido. Verifique a digitação.")
 else:
-    col_vazia, col_sair = st.columns([4, 1])
+    # Mostra quem está logado no topo da tela, ao lado do botão de sair
+    col_vazia, col_info, col_sair = st.columns([3, 1, 1])
+    with col_info:
+        st.write(f"👤 Olá, {st.session_state.usuario_atual}")
     with col_sair:
         if st.button("Sair"):
             st.session_state.autenticado = False
@@ -40,13 +47,14 @@ else:
 
     st.title("📅 Agenda Compartilhada")
 
-    # 1. Formulário (Fica de fora da atualização automática para não apagar durante a digitação)
     with st.form("novo_evento"):
         col1, col2, col3, col4 = st.columns(4)
         data = col1.date_input("Data")
         hora = col2.time_input("Hora")
         titulo = col3.text_input("Título")
-        responsavel = col4.text_input("Responsável")
+        
+        # O campo Responsável já vem preenchido com o nome de quem fez login
+        responsavel = col4.text_input("Responsável", value=st.session_state.usuario_atual)
         
         if st.form_submit_button("Agendar Horário") and titulo:
             with conn.session as s:
@@ -58,13 +66,11 @@ else:
             st.success("Agendado!")
             st.rerun()
 
-  
+    st.divider()
 
-    # 2. Fragmento de Tempo Real (Roda de forma independente a cada 10 segundos)
     @st.fragment(run_every="10s")
     def painel_em_tempo_real():
         try:
-            # Busca os dados mais recentes no Supabase
             df = conn.query("SELECT * FROM eventos ORDER BY data, hora", ttl="0m")
             
             with st.expander("Gerenciar / Excluir Eventos"):
@@ -80,7 +86,7 @@ else:
                                     {"data": evento['data'], "hora": evento['hora'], "titulo": evento['titulo']}
                                 )
                                 s.commit()
-                            st.rerun() # Atualiza apenas este fragmento
+                            st.rerun()
                 else:
                     st.info("Nenhum evento agendado.")
 
@@ -91,7 +97,8 @@ else:
                 for _, row in df.iterrows():
                     inicio = f"{row['data']}T{row['hora']}:00"
                     eventos_visuais.append({
-                        "title": f"Ocupado: {row['titulo']}",
+                        # O calendário agora mostra o título do evento e quem marcou
+                        "title": f"{row['titulo']} ({row['responsavel']})",
                         "start": inicio,
                         "color": "#17803d"
                     })
@@ -113,5 +120,4 @@ else:
         except Exception as e:
             st.error(f"Erro: {e}")
 
-    # 3. Executa a função do fragmento na tela
     painel_em_tempo_real()
