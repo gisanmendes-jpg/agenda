@@ -13,7 +13,8 @@ st.set_page_config(page_title="Agenda Compartilhada", layout="wide")
 USUARIOS = {
     "gisa": "gisanmendes@gmail.com",
     "fabio": "fabioadriano044@gmail.com",
-    "andre": "gisanmendes@gmail.com"
+    "andre": "gisanmendes@gmail.com",
+    "guilherme": "guilhermeatuba@gmail.com"
 }
 
 # Função disparadora de e-mails
