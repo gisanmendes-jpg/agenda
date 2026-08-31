@@ -45,10 +45,12 @@ with st.form("novo_evento"):
 st.divider()
 st.subheader("Próximos Eventos")
 
-# Busca os dados (ttl=0 garante que a tabela não fique salva em cache e mostre dados velhos)
-df = conn.query("SELECT * FROM eventos ORDER BY data, hora", ttl="0m")
-
-if not df.empty:
-    st.dataframe(df, use_container_width=True, hide_index=True)
-else:
-    st.info("Nenhum evento agendado ainda. Use o formulário acima para começar.")
+# Busca os dados (ttl=0 garante que não fique em cache)
+try:
+    df = conn.query("SELECT * FROM eventos ORDER BY data, hora", ttl="0m")
+    if not df.empty:
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum evento agendado ainda. Use o formulário acima para começar.")
+except Exception as e:
+    st.error(f"Erro ao carregar os eventos: {e}")
