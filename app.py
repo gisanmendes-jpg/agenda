@@ -1,21 +1,17 @@
 import streamlit as st
 import pandas as pd
 from sqlalchemy import text
+from streamlit_calendar import calendar
 
-st.set_page_config(page_title="Agenda Compartilhada", layout="centered")
+st.set_page_config(page_title="Agenda Compartilhada", layout="wide") # 'wide' fica melhor para o calendário
 
-# 1. Defina quem pode acessar a agenda
-EMAILS_AUTORIZADOS = ["gisanmendes@gmail.com", "fabioadriano044@gmail.com"]
+EMAILS_AUTORIZADOS = ["gisanmendes@gmail.com", "outrapessoa@gmail.com"]
 
-# 2. Inicializa o controle de acesso na sessão
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
-# 3. Tela de Login
 if not st.session_state.autenticado:
     st.title("🔒 Acesso Restrito")
-    st.write("Por favor, identifique-se para acessar a agenda.")
-    
     email_digitado = st.text_input("Seu e-mail")
     
     if st.button("Entrar"):
@@ -23,18 +19,14 @@ if not st.session_state.autenticado:
             st.session_state.autenticado = True
             st.rerun()
         else:
-            st.error("E-mail não autorizado. Verifique a digitação.")
-
-# 4. O Aplicativo Principal
+            st.error("E-mail não autorizado.")
 else:
-    # Botão Sair
     col_vazia, col_sair = st.columns([4, 1])
     with col_sair:
         if st.button("Sair"):
             st.session_state.autenticado = False
             st.rerun()
 
-    # Conexão com o Supabase
     conn = st.connection("postgresql", type="sql")
 
     def criar_tabela():
@@ -42,77 +34,80 @@ else:
             s.execute(text('''CREATE TABLE IF NOT EXISTS eventos 
                              (data TEXT, hora TEXT, titulo TEXT, responsavel TEXT)'''))
             s.commit()
-
     criar_tabela()
 
     st.title("📅 Agenda Compartilhada")
 
-    # Formulário de Agendamento
+    # 1. Formulário de Agendamento
     with st.form("novo_evento"):
-        st.subheader("Agendar Novo Evento")
-        col1, col2 = st.columns(2)
-        
+        col1, col2, col3, col4 = st.columns(4)
         data = col1.date_input("Data")
         hora = col2.time_input("Hora")
-        titulo = st.text_input("Título do Evento")
-        responsavel = st.text_input("Seu Nome / Responsável")
+        titulo = col3.text_input("Título")
+        responsavel = col4.text_input("Responsável")
         
-        submit = st.form_submit_button("Salvar Evento")
-        
-        if submit and titulo:
+        if st.form_submit_button("Agendar Horário") and titulo:
             with conn.session as s:
                 s.execute(
                     text('INSERT INTO eventos (data, hora, titulo, responsavel) VALUES (:data, :hora, :titulo, :responsavel)'),
                     {"data": data.strftime("%Y-%m-%d"), "hora": hora.strftime("%H:%M"), "titulo": titulo, "responsavel": responsavel}
                 )
                 s.commit()
-            st.success("Evento agendado com sucesso!")
+            st.success("Agendado!")
             st.rerun()
 
     st.divider()
-    
-    # Seção da Tabela com Exclusão
-    st.subheader("Próximos Eventos")
-    st.caption("Selecione a caixa ao lado de um evento na tabela para opções de exclusão.")
 
+    # 2. Leitura dos Dados
     try:
         df = conn.query("SELECT * FROM eventos ORDER BY data, hora", ttl="0m")
+        
+        # 3. Formatação para o Calendário Visual
+        eventos_visuais = []
         if not df.empty:
-            
-            # Tabela interativa (permite selecionar 1 linha por vez)
-            selecao_evento = st.dataframe(
-                df, 
-                use_container_width=True, 
-                hide_index=True,
-                on_select="rerun",           # Atualiza a tela ao clicar
-                selection_mode="single-row"  # Habilita seleção de linha
-            )
-            
-            # Verifica se alguma linha foi clicada
-            linhas_selecionadas = selecao_evento.selection.rows
-            
-            if len(linhas_selecionadas) > 0:
-                # Pega os dados da linha que o usuário clicou
-                indice = linhas_selecionadas[0]
-                evento = df.iloc[indice]
+            for _, row in df.iterrows():
+                # Junta data e hora no formato ISO (ex: 2026-09-07T10:00:00)
+                inicio = f"{row['data']}T{row['hora']}:00"
+                eventos_visuais.append({
+                    "title": f"Ocupado: {row['titulo']}",
+                    "start": inicio,
+                    "color": "#17803d" # Cor verde semelhante a da sua imagem
+                })
+        
+        # 4. Renderização do Calendário (Estilo Google)
+        opcoes_calendario = {
+            "headerToolbar": {
+                "left": "today prev,next",
+                "center": "title",
+                "right": "timeGridWeek,timeGridDay"
+            },
+            "initialView": "timeGridWeek", # Abre na visão semanal
+            "slotMinTime": "06:00:00",     # Esconde a madrugada
+            "slotMaxTime": "22:00:00",
+            "allDaySlot": False,
+        }
+        
+        # Exibe a interface
+        st.subheader("Visão Geral de Disponibilidade")
+        calendar(events=eventos_visuais, options=opcoes_calendario)
+
+        # 5. Mantém a tabela apenas para exclusão
+        with st.expander("Gerenciar / Excluir Eventos"):
+            if not df.empty:
+                selecao = st.dataframe(df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
+                linhas = selecao.selection.rows
+                if len(linhas) > 0:
+                    evento = df.iloc[linhas[0]]
+                    if st.button(f"🗑️ Excluir '{evento['titulo']}'", type="primary"):
+                        with conn.session as s:
+                            s.execute(
+                                text("DELETE FROM eventos WHERE data=:data AND hora=:hora"),
+                                {"data": evento['data'], "hora": evento['hora']}
+                            )
+                            s.commit()
+                        st.rerun()
+            else:
+                st.info("Nenhum evento.")
                 
-                # Exibe a área de confirmação de exclusão
-                st.error(f"⚠️ Deseja realmente cancelar o evento **{evento['titulo']}** do dia {evento['data']}?")
-                
-                if st.button("Confirmar Exclusão", type="primary"):
-                    with conn.session as s:
-                        # Deleta o evento buscando a combinação exata de data, hora e título
-                        s.execute(
-                            text("DELETE FROM eventos WHERE data=:data AND hora=:hora AND titulo=:titulo AND responsavel=:responsavel"),
-                            {"data": evento['data'], "hora": evento['hora'], "titulo": evento['titulo'], "responsavel": evento['responsavel']}
-                        )
-                        s.commit()
-                    
-                    st.success("Evento excluído com sucesso!")
-                    st.rerun()
-                    
-        else:
-            st.info("Nenhum evento agendado ainda. Use o formulário acima para começar.")
-            
     except Exception as e:
-        st.error(f"Erro ao carregar os eventos: {e}")
+        st.error(f"Erro: {e}")
